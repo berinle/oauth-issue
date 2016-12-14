@@ -8,18 +8,13 @@ import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.security.access.expression.method.MethodSecurityExpressionHandler;
 import org.springframework.security.authentication.TestingAuthenticationToken;
-import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
-import org.springframework.security.config.annotation.method.configuration.GlobalMethodSecurityConfiguration;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.codec.Base64;
 import org.springframework.security.oauth2.common.OAuth2AccessToken;
 import org.springframework.security.oauth2.provider.OAuth2Authentication;
 import org.springframework.security.oauth2.provider.OAuth2Request;
-import org.springframework.security.oauth2.provider.expression.OAuth2MethodSecurityExpressionHandler;
 import org.springframework.security.oauth2.provider.token.AuthorizationServerTokenServices;
 import org.springframework.stereotype.Component;
 import org.springframework.test.context.junit4.SpringRunner;
@@ -29,13 +24,12 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 import java.util.Arrays;
-import java.util.Base64;
 
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.*;
 
 //http://stackoverflow.com/questions/25764459/spring-boot-application-properties-value-not-populating
 @RunWith(SpringRunner.class)
@@ -54,6 +48,9 @@ public class AppTests {
   private OAuthHelper authHelper;
 
   @Autowired
+  private JwtHelper jwtHelper;
+
+  @Autowired
   private WebApplicationContext webApplicationContext;
 
   private MockMvc mockMvc;
@@ -65,8 +62,16 @@ public class AppTests {
 
   @Test
   public void basicGet() throws Exception {
-//    mockMvc.perform(get("/hi").with(new JwtRequestPostProcessor())
     mockMvc.perform(get("/hi").with(authHelper.addBearerToken("test", "ROLE_USER"))
+        .accept(MediaType.APPLICATION_JSON_UTF8))
+        .andDo(print())
+        .andExpect(status().isOk())
+        .andExpect(content().string("hello"));
+  }
+
+  @Test
+  public void basicGet_withJwt() throws Exception {
+    mockMvc.perform(get("/hi").with(jwtHelper.injectValidBearerToken())
         .accept(MediaType.APPLICATION_JSON_UTF8))
         .andDo(print())
         .andExpect(status().isOk())
@@ -74,76 +79,42 @@ public class AppTests {
   }
 }
 
-
-/*@Configuration
-@EnableAuthorizationServer
-@EnableGlobalMethodSecurity(prePostEnabled = true)
-class TestAuthorizationServer extends AuthorizationServerConfigurerAdapter {
-  @Autowired
-  private AuthenticationManager authenticationManager;
-
-//  @Autowired
-//  private TokenStore tokenStore;
-
-  @Override
-  public void configure(ClientDetailsServiceConfigurer clients) throws Exception {
-    clients
-        .inMemory()
-        .withClient("myclient")
-        .scopes("read", "write");
-  }
-
-  @Override
-  public void configure(AuthorizationServerEndpointsConfigurer endpoints) throws Exception {
-    endpoints
-        .authenticationManager(authenticationManager)
-//        .tokenStore(tokenStore)
-        .accessTokenConverter(accessTokenConverter());
-  }
-
-  @Bean
-  public AccessTokenConverter accessTokenConverter() throws Exception {
-    JwtAccessTokenConverter converter = new JwtAccessTokenConverter();
-    converter.setSigningKey("secret");
-    converter.afterPropertiesSet();
-    return converter;
-  }
-
-}*/
-
-@Component
+/*@Component
 class JwtRequestPostProcessor implements RequestPostProcessor {
-
-//  private final String signingKey;
-//
-//  JwtRequestPostProcessor(String signingKey) {
-//    this.signingKey = signingKey;
-//  }
 
   @Override
   public MockHttpServletRequest postProcessRequest(MockHttpServletRequest request) {
     String jwt = Jwts.builder()
         .claim("scope", Arrays.asList("read", "write", "junk"))
         .claim("client_id", "myclient")
-//        .signWith(SignatureAlgorithm.HS256, Base64.getEncoder().encode(signingKey.getBytes()))
-        .signWith(SignatureAlgorithm.HS256, Base64.getEncoder().encode("mykey".getBytes()))
+        .signWith(SignatureAlgorithm.HS256, Base64.getEncoder().encode("foo".getBytes()))
         .compact();
 
     System.out.println(">>>>>>jwt = " + jwt);
     request.addHeader("Authorization", "Bearer " + jwt);
     return request;
   }
+}*/
+
+
+@Component
+class JwtHelper {
+  @Autowired
+  AuthorizationServerTokenServices tokenServices;
+
+  RequestPostProcessor injectValidBearerToken() {
+    return req -> {
+      String jwt = Jwts.builder()
+          .claim("client_id", "myclient")
+          .claim("scope", Arrays.asList("read", "write"))
+          .signWith(SignatureAlgorithm.HS256, Base64.encode("secret".getBytes()))
+          .compact();
+      req.addHeader("Authorization", "Bearer " + jwt);
+      return req;
+    };
+  }
 }
 
-//@Configuration
-//@EnableGlobalMethodSecurity(prePostEnabled = true)
-//class MethodSecurityConfig extends GlobalMethodSecurityConfiguration {
-//
-//  @Override
-//  protected MethodSecurityExpressionHandler createExpressionHandler() {
-//    return new OAuth2MethodSecurityExpressionHandler();
-//  }
-//}
 
 @Component
 class OAuthHelper {

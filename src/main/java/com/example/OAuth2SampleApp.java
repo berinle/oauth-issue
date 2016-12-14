@@ -83,39 +83,9 @@ class AuthServerOAuth2Config extends AuthorizationServerConfigurerAdapter {
 	private JwtAccessTokenConverter tokenEnhancer() {
 		JwtAccessTokenConverter converter = new JwtAccessTokenConverter();
 		converter.setSigningKey(signingKey);
+
+		//needed, else test fails with {"error":"invalid_token","error_description":"Cannot convert access token to JSON"}
 		converter.setVerifier(new MacSigner(signingKey.getBytes()));
 		return converter;
 	}
 }
-
-//Method config
-/*@Configuration
-@EnableGlobalMethodSecurity(prePostEnabled = true)
-class MethodSecurityConfig extends GlobalMethodSecurityConfiguration {
-
-	@Override
-	protected MethodSecurityExpressionHandler createExpressionHandler() {
-		return new OAuth2MethodSecurityExpressionHandler();
-	}
-}*/
-
-
-//Resource server
-@Configuration
-@EnableResourceServer
-class ResourceServerConfig extends ResourceServerConfigurerAdapter {
-
-	@Override
-	public void configure(HttpSecurity http) throws Exception {
-		http.authorizeRequests().anyRequest().permitAll();
-	}
-}
-
-/*
-@Configuration
-class AppConfig {
-	@Bean
-	public static PropertySourcesPlaceholderConfigurer propertyConfigInDev() {
-		return new PropertySourcesPlaceholderConfigurer();
-	}
-}*/
